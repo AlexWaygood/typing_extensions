@@ -95,7 +95,9 @@ jobs:
       - name: Install typing_inspect test dependencies
         run: pip install -r test-requirements.txt
       - name: Install typing_extensions latest
-        run: pip install ./typing-extensions-latest
+        run: |
+          pip uninstall typing_extensions
+          pip install ./typing-extensions-latest
       - name: List all installed dependencies
         run: pip freeze --all
       - name: Run typing_inspect tests
