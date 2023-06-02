@@ -572,11 +572,11 @@ else:
                 )
 
         def __subclasscheck__(cls, other):
-            if cls is Protocol:
-                return type.__subclasscheck__(cls, other)
             if not isinstance(other, type):
                 # Same error message as for issubclass(1, int).
                 raise TypeError('issubclass() arg 1 must be a class')
+            if cls is Protocol:
+                return Protocol in other.__mro__
             if (
                 getattr(cls, '_is_protocol', False)
                 and not _allow_reckless_class_checks()
@@ -596,7 +596,7 @@ else:
             # We need this method for situations where attributes are
             # assigned in __init__.
             if cls is Protocol:
-                return type.__instancecheck__(cls, instance)
+                return Protocol in type(instance).__mro__
             if not getattr(cls, "_is_protocol", False):
                 # i.e., it's a concrete subclass of a protocol
                 return super().__instancecheck__(instance)
