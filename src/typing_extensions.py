@@ -595,6 +595,8 @@ else:
         def __instancecheck__(cls, instance):
             # We need this method for situations where attributes are
             # assigned in __init__.
+            if cls is Protocol:
+                return type.__instancecheck__(cls, instance)
             if not getattr(cls, "_is_protocol", False):
                 # i.e., it's a concrete subclass of a protocol
                 return super().__instancecheck__(instance)
@@ -663,16 +665,9 @@ else:
                 return NotImplemented
         return True
 
-    _ACCEPTABLE_PROTO_BASES = frozenset({
-        object,
-        typing.Generic,
-        getattr(typing, "Protocol", object())
-    })
-
     def _check_proto_bases(cls):
         for base in cls.__bases__:
-            if not (base is Protocol or
-                    base in _ACCEPTABLE_PROTO_BASES or
+            if not (base in (object, typing.Generic) or
                     base.__module__ in _PROTO_ALLOWLIST and
                     base.__name__ in _PROTO_ALLOWLIST[base.__module__] or
                     isinstance(base, _ProtocolMeta) and base._is_protocol):
@@ -683,7 +678,7 @@ else:
         class Protocol(typing.Generic, metaclass=_ProtocolMeta):
             __doc__ = typing.Protocol.__doc__
             __slots__ = ()
-            _is_protocol = False
+            _is_protocol = True
             _is_runtime_protocol = False
 
             def __init_subclass__(cls, *args, **kwargs):
@@ -741,7 +736,7 @@ else:
                         ...
             """
             __slots__ = ()
-            _is_protocol = False
+            _is_protocol = True
             _is_runtime_protocol = False
 
             def __new__(cls, *args, **kwds):

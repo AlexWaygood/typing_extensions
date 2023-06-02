@@ -1938,6 +1938,7 @@ class ProtocolTests(BaseTestCase):
         with self.assertRaisesRegex(TypeError, only_classes_allowed):
             issubclass(1, BadPG)
 
+    @skip_if_py312b1
     def test_issubclass_and_isinstance_on_Protocol_itself(self):
         class C:
             def x(self): pass
