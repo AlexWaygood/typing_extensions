@@ -96,7 +96,7 @@ jobs:
         run: pip install -r test-requirements.txt
       - name: Install typing_extensions latest
         run: |
-          pip uninstall typing_extensions
+          pip uninstall typing_extensions --yes
           pip install ./typing-extensions-latest
       - name: List all installed dependencies
         run: pip freeze --all
