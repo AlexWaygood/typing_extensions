@@ -4,6 +4,9 @@
 - Fix tests on Python 3.13, which removes support for creating
   `TypedDict` classes through the keyword-argument syntax. Patch by
   Jelle Zijlstra.
+- Fix a regression introduced in v4.6.3 where
+  `issubclass(object, typing_extensions.Protocol)` would erroneously raise
+  `TypeError`. Backport of https://github.com/python/cpython/pull/105239.
 
 # Release 4.6.3 (June 1, 2023)
 

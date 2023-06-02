@@ -572,6 +572,8 @@ else:
                 )
 
         def __subclasscheck__(cls, other):
+            if cls is Protocol:
+                return type.__subclasscheck__(cls, other)
             if not isinstance(other, type):
                 # Same error message as for issubclass(1, int).
                 raise TypeError('issubclass() arg 1 must be a class')
@@ -661,9 +663,16 @@ else:
                 return NotImplemented
         return True
 
+    _ACCEPTABLE_PROTO_BASES = frozenset({
+        object,
+        typing.Generic,
+        getattr(typing, "Protocol", object())
+    })
+
     def _check_proto_bases(cls):
         for base in cls.__bases__:
-            if not (base in (object, typing.Generic) or
+            if not (base is Protocol or
+                    base in _ACCEPTABLE_PROTO_BASES or
                     base.__module__ in _PROTO_ALLOWLIST and
                     base.__name__ in _PROTO_ALLOWLIST[base.__module__] or
                     isinstance(base, _ProtocolMeta) and base._is_protocol):
@@ -674,7 +683,7 @@ else:
         class Protocol(typing.Generic, metaclass=_ProtocolMeta):
             __doc__ = typing.Protocol.__doc__
             __slots__ = ()
-            _is_protocol = True
+            _is_protocol = False
             _is_runtime_protocol = False
 
             def __init_subclass__(cls, *args, **kwargs):
@@ -732,7 +741,7 @@ else:
                         ...
             """
             __slots__ = ()
-            _is_protocol = True
+            _is_protocol = False
             _is_runtime_protocol = False
 
             def __new__(cls, *args, **kwds):
