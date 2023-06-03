@@ -4213,6 +4213,15 @@ class FinalDecoratorTests(BaseTestCase):
         self.assertIs(True, Methods.cached.__final__)
 
 
+class RevealTypeTests(BaseTestCase):
+    def test_reveal_type(self):
+        obj = object()
+
+        with contextlib.redirect_stderr(io.StringIO()) as stderr:
+            self.assertIs(obj, reveal_type(obj))
+            self.assertEqual("Runtime type is 'object'", stderr.getvalue().strip())
+
+
 class DataclassTransformTests(BaseTestCase):
     def test_decorator(self):
         def create_model(*, frozen: bool = False, kw_only: bool = True):
