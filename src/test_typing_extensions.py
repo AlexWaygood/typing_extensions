@@ -3321,6 +3321,7 @@ class AnnotatedTests(BaseTestCase):
         self.assertEqual(a.classvar, c.classvar)
 
     def test_instantiate_generic(self):
+        collections.abc.Mapping._dump_registry()
         collections.Counter([4, 4, 5])
 
     def test_cannot_instantiate_forward(self):
