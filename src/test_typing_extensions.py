@@ -4222,6 +4222,193 @@ class RevealTypeTests(BaseTestCase):
             self.assertEqual("Runtime type is 'object'", stderr.getvalue().strip())
 
 
+class DataclassTransformTests(BaseTestCase):
+    def test_decorator(self):
+        def create_model(*, frozen: bool = False, kw_only: bool = True):
+            return lambda cls: cls
+
+        decorated = dataclass_transform(kw_only_default=True, order_default=False)(create_model)
+
+        class CustomerModel:
+            id: int
+
+        self.assertIs(decorated, create_model)
+        self.assertEqual(
+            decorated.__dataclass_transform__,
+            {
+                "eq_default": True,
+                "order_default": False,
+                "kw_only_default": True,
+                "frozen_default": False,
+                "field_specifiers": (),
+                "kwargs": {},
+            }
+        )
+        self.assertIs(
+            decorated(frozen=True, kw_only=False)(CustomerModel),
+            CustomerModel
+        )
+
+    def test_base_class(self):
+        class ModelBase:
+            def __init_subclass__(cls, *, frozen: bool = False): ...
+
+        Decorated = dataclass_transform(
+            eq_default=True,
+            order_default=True,
+            # Arbitrary unrecognized kwargs are accepted at runtime.
+            make_everything_awesome=True,
+        )(ModelBase)
+
+        class CustomerModel(Decorated, frozen=True):
+            id: int
+
+        self.assertIs(Decorated, ModelBase)
+        self.assertEqual(
+            Decorated.__dataclass_transform__,
+            {
+                "eq_default": True,
+                "order_default": True,
+                "kw_only_default": False,
+                "frozen_default": False,
+                "field_specifiers": (),
+                "kwargs": {"make_everything_awesome": True},
+            }
+        )
+        self.assertIsSubclass(CustomerModel, Decorated)
+
+    def test_metaclass(self):
+        class Field: ...
+
+        class ModelMeta(type):
+            def __new__(
+                cls, name, bases, namespace, *, init: bool = True,
+            ):
+                return super().__new__(cls, name, bases, namespace)
+
+        Decorated = dataclass_transform(
+            order_default=True, field_specifiers=(Field,)
+        )(ModelMeta)
+
+        class ModelBase(metaclass=Decorated): ...
+
+        class CustomerModel(ModelBase, init=False):
+            id: int
+
+        self.assertIs(Decorated, ModelMeta)
+        self.assertEqual(
+            Decorated.__dataclass_transform__,
+            {
+                "eq_default": True,
+                "order_default": True,
+                "kw_only_default": False,
+                "frozen_default": False,
+                "field_specifiers": (Field,),
+                "kwargs": {},
+            }
+        )
+        self.assertIsInstance(CustomerModel, Decorated)
+
+
+class AllTests(BaseTestCase):
+
+    def test_typing_extensions_includes_standard(self):
+        a = typing_extensions.__all__
+        self.assertIn('ClassVar', a)
+        self.assertIn('Type', a)
+        self.assertIn('ChainMap', a)
+        self.assertIn('ContextManager', a)
+        self.assertIn('Counter', a)
+        self.assertIn('DefaultDict', a)
+        self.assertIn('Deque', a)
+        self.assertIn('NewType', a)
+        self.assertIn('overload', a)
+        self.assertIn('Text', a)
+        self.assertIn('TYPE_CHECKING', a)
+        self.assertIn('TypeAlias', a)
+        self.assertIn('ParamSpec', a)
+        self.assertIn("Concatenate", a)
+
+        self.assertIn('Annotated', a)
+        self.assertIn('get_type_hints', a)
+
+        self.assertIn('Awaitable', a)
+        self.assertIn('AsyncIterator', a)
+        self.assertIn('AsyncIterable', a)
+        self.assertIn('Coroutine', a)
+        self.assertIn('AsyncContextManager', a)
+
+        self.assertIn('AsyncGenerator', a)
+
+        self.assertIn('Protocol', a)
+        self.assertIn('runtime', a)
+
+        # Check that all objects in `__all__` are present in the module
+        for name in a:
+            self.assertTrue(hasattr(typing_extensions, name))
+
+    def test_all_names_in___all__(self):
+        exclude = {
+            'GenericMeta',
+            'KT',
+            'PEP_560',
+            'T',
+            'T_co',
+            'T_contra',
+            'VT',
+        }
+        actual_names = {
+            name for name in dir(typing_extensions)
+            if not name.startswith("_")
+            and not isinstance(getattr(typing_extensions, name), types.ModuleType)
+        }
+        # Make sure all public names are in __all__
+        self.assertEqual({*exclude, *typing_extensions.__all__},
+                         actual_names)
+        # Make sure all excluded names actually exist
+        self.assertLessEqual(exclude, actual_names)
+
+    def test_typing_extensions_defers_when_possible(self):
+        exclude = {
+            'dataclass_transform',
+            'overload',
+            'ParamSpec',
+            'Text',
+            'TypeVar',
+            'TypeVarTuple',
+            'TYPE_CHECKING',
+            'Final',
+            'get_type_hints',
+        }
+        if sys.version_info < (3, 10):
+            exclude |= {'get_args', 'get_origin'}
+        if sys.version_info < (3, 10, 1):
+            exclude |= {"Literal"}
+        if sys.version_info < (3, 11):
+            exclude |= {'final', 'Any', 'NewType'}
+        if sys.version_info < (3, 12):
+            exclude |= {
+                'Protocol', 'runtime_checkable', 'SupportsAbs', 'SupportsBytes',
+                'SupportsComplex', 'SupportsFloat', 'SupportsIndex', 'SupportsInt',
+                'SupportsRound', 'TypedDict', 'is_typeddict', 'NamedTuple', 'Unpack',
+            }
+        for item in typing_extensions.__all__:
+            if item not in exclude and hasattr(typing, item):
+                self.assertIs(
+                    getattr(typing_extensions, item),
+                    getattr(typing, item))
+
+    def test_typing_extensions_compiles_with_opt(self):
+        file_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                 'typing_extensions.py')
+        try:
+            subprocess.check_output(f'{sys.executable} -OO {file_path}',
+                                    stderr=subprocess.STDOUT,
+                                    shell=True)
+        except subprocess.CalledProcessError:
+            self.fail('Module does not compile with optimize=2 (-OO flag).')
+
+
 class CoolEmployee(NamedTuple):
     name: str
     cool: int
