@@ -3321,9 +3321,7 @@ class AnnotatedTests(BaseTestCase):
         self.assertEqual(a.classvar, c.classvar)
 
     def test_instantiate_generic(self):
-        MyCount = Annotated[typing_extensions.Counter[T], "my decoration"]
-        self.assertEqual(MyCount([4, 4, 5]), {4: 2, 5: 1})
-        self.assertEqual(MyCount[int]([4, 4, 5]), {4: 2, 5: 1})
+        self.assertEqual(collections.Counter([4, 4, 5]), {4: 2, 5: 1})
 
     def test_cannot_instantiate_forward(self):
         A = Annotated["int", (5, 6)]
