@@ -41,6 +41,8 @@ from _typed_dict_test_helper import Foo, FooGeneric
 
 # Flags used to mark tests that only apply after a specific
 # version of the typing module.
+TYPING_3_8_0 = sys.version_info[:3] >= (3, 8, 0)
+TYPING_3_9_0 = sys.version_info[:3] >= (3, 9, 0)
 TYPING_3_10_0 = sys.version_info[:3] >= (3, 10, 0)
 
 # 3.11 makes runtime type checks (_type_check) more lenient.
@@ -2411,6 +2413,31 @@ class ProtocolTests(BaseTestCase):
 
         self.assertNotIsSubclass(NotImpl, Foo)
 
+    if sys.version_info >= (3, 12):
+        exec(textwrap.dedent(
+            """
+            @skip_if_py312b1
+            def test_pep695_generics_can_be_runtime_checkable(self):
+                @runtime_checkable
+                class HasX(Protocol):
+                    x: int
+
+                class Bar[T]:
+                    x: T
+                    def __init__(self, x):
+                        self.x = x
+
+                class Capybara[T]:
+                    y: str
+                    def __init__(self, y):
+                        self.y = y
+
+                self.assertIsInstance(Bar(1), HasX)
+                self.assertNotIsInstance(Capybara('a'), HasX)
+                """
+        ))
+
+    @skip_if_py312b1
     def test_protocols_isinstance_generic_classes(self):
         T = TypeVar("T")
 
@@ -2587,6 +2614,48 @@ class ProtocolTests(BaseTestCase):
         if not TYPING_3_10_0:
             with self.assertRaises(TypeError):
                 PR[int, ClassVar]
+
+    if hasattr(typing, "TypeAliasType"):
+        exec(textwrap.dedent(
+            """
+            def test_pep695_generic_protocol_callable_members(self):
+                @runtime_checkable
+                class Foo[T](Protocol):
+                    def meth(self, x: T) -> None: ...
+
+                class Bar[T]:
+                    def meth(self, x: T) -> None: ...
+
+                self.assertIsInstance(Bar(), Foo)
+                self.assertIsSubclass(Bar, Foo)
+
+                @runtime_checkable
+                class SupportsTrunc[T](Protocol):
+                    def __trunc__(self) -> T: ...
+
+                self.assertIsInstance(0.0, SupportsTrunc)
+                self.assertIsSubclass(float, SupportsTrunc)
+
+            def test_no_weird_caching_with_issubclass_after_isinstance_pep695(self):
+                @runtime_checkable
+                class Spam[T](Protocol):
+                    x: T
+
+                class Eggs[T]:
+                    def __init__(self, x: T) -> None:
+                        self.x = x
+
+                self.assertIsInstance(Eggs(42), Spam)
+
+                # gh-104555: If we didn't override ABCMeta.__subclasscheck__ in _ProtocolMeta,
+                # TypeError wouldn't be raised here,
+                # as the cached result of the isinstance() check immediately above
+                # would mean the issubclass() call would short-circuit
+                # before we got to the "raise TypeError" line
+                with self.assertRaises(TypeError):
+                    issubclass(Eggs, Spam)
+            """
+        ))
 
     def test_init_called(self):
         T = TypeVar('T')
@@ -3047,6 +3116,7 @@ class TypedDictTests(BaseTestCase):
         # classes, not instances
         assert is_typeddict(Point2D()) is False
 
+    @skipUnless(TYPING_3_8_0, "Python 3.8+ required")
     def test_is_typeddict_against_typeddict_from_typing(self):
         Point = typing.TypedDict('Point', {'x': int, 'y': int})
 
@@ -4421,6 +4491,13 @@ class NamedTupleTests(BaseTestCase):
                 x: int = 3
                 y: int
 
+    @skipUnless(
+        (
+            TYPING_3_8_0
+            or hasattr(CoolEmployeeWithDefault, '_field_defaults')
+        ),
+        '"_field_defaults" attribute was added in a micro version of 3.7'
+    )
     def test_field_defaults(self):
         self.assertEqual(CoolEmployeeWithDefault._field_defaults, dict(cool=0))
 
@@ -4505,6 +4582,7 @@ class NamedTupleTests(BaseTestCase):
                 with self.assertRaisesRegex(TypeError, f'Too many {things}'):
                     G[int, str]
 
+    @skipUnless(TYPING_3_9_0, "tuple.__class_getitem__ was added in 3.9")
     def test_non_generic_subscript_py39_plus(self):
         # For backward compatibility, subscription works
         # on arbitrary NamedTuple types.
@@ -4518,6 +4596,19 @@ class NamedTupleTests(BaseTestCase):
         a = A(1, [2])
         self.assertIs(type(a), Group)
         self.assertEqual(a, (1, [2]))
+
+    @skipIf(TYPING_3_9_0, "Test isn't relevant to 3.9+")
+    def test_non_generic_subscript_error_message_py38_minus(self):
+        class Group(NamedTuple):
+            key: T
+            group: List[T]
+
+        with self.assertRaisesRegex(TypeError, 'not subscriptable'):
+            Group[int]
+
+        for attr in ('__args__', '__origin__', '__parameters__'):
+            with self.subTest(attr=attr):
+                self.assertFalse(hasattr(Group, attr))
 
     def test_namedtuple_keyword_usage(self):
         LocalEmployee = NamedTuple("LocalEmployee", name=str, age=int)
@@ -4595,15 +4686,29 @@ class NamedTupleTests(BaseTestCase):
         self.assertEqual(NamedTuple.__doc__, typing.NamedTuple.__doc__)
         self.assertIsInstance(NamedTuple.__doc__, str)
 
+    @skipUnless(TYPING_3_8_0, "NamedTuple had a bad signature on <=3.7")
     def test_signature_is_same_as_typing_NamedTuple(self):
         self.assertEqual(inspect.signature(NamedTuple), inspect.signature(typing.NamedTuple))
 
+    @skipIf(TYPING_3_8_0, "tests are only relevant to <=3.7")
+    def test_signature_on_37(self):
+        self.assertIsInstance(inspect.signature(NamedTuple), inspect.Signature)
+        self.assertFalse(hasattr(NamedTuple, "__text_signature__"))
+
+    @skipUnless(TYPING_3_9_0, "NamedTuple was a class on 3.8 and lower")
     def test_same_as_typing_NamedTuple_39_plus(self):
         self.assertEqual(
             set(dir(NamedTuple)) - {"__text_signature__"},
             set(dir(typing.NamedTuple))
         )
         self.assertIs(type(NamedTuple), type(typing.NamedTuple))
+
+    @skipIf(TYPING_3_9_0, "tests are only relevant to <=3.8")
+    def test_same_as_typing_NamedTuple_38_minus(self):
+        self.assertEqual(
+            self.NestedEmployee.__annotations__,
+            self.NestedEmployee._field_types
+        )
 
     def test_orig_bases(self):
         T = TypeVar('T')
@@ -4744,6 +4849,9 @@ class TypeVarTests(BaseTestCase):
                                     r"Bound must be a type\. Got \(1, 2\)\."):
             TypeVar('X', bound=(1, 2))
 
+    # Technically we could run it on later versions of 3.7 and 3.8,
+    # but that's not worth the effort.
+    @skipUnless(TYPING_3_9_0, "Fix was not backported")
     def test_missing__name__(self):
         # See bpo-39942
         code = ("import typing\n"
@@ -4897,6 +5005,7 @@ class GetOriginalBasesTests(BaseTestCase):
         with self.assertRaisesRegex(TypeError, "Expected an instance of type"):
             get_original_bases(object())
 
+    @skipUnless(TYPING_3_9_0, "PEP 585 is yet to be")
     def test_builtin_generics(self):
         class E(list[T]): pass
         class F(list[int]): pass
