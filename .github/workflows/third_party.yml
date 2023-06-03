@@ -35,7 +35,11 @@ jobs:
         github.repository == 'python/typing_extensions'
         || github.event_name != 'schedule'
       }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: ["ubuntu-latest", "windows-latest", "macos-latest"]
+      fail-fast: false
     timeout-minutes: 60
     steps:
       - name: Checkout typing_inspect
