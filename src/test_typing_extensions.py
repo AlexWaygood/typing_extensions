@@ -3323,6 +3323,7 @@ class AnnotatedTests(BaseTestCase):
     def test_instantiate_generic(self):
         collections.abc.Mapping._dump_registry()
         Protocol._dump_registry()
+        collections.abc.Mapping._abc_caches_clear()
         collections.Counter([4, 4, 5])
 
     def test_cannot_instantiate_forward(self):
