@@ -63,4 +63,4 @@ jobs:
       - name: List all installed dependencies
         run: pip freeze --all
       - name: Run typing_inspect tests
-        run: pytest
+        run: pytest typing-extensions-latest/src/test_typing_extensions.py
