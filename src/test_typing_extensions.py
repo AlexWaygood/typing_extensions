@@ -3325,6 +3325,7 @@ class AnnotatedTests(BaseTestCase):
         Protocol._dump_registry()
         collections.abc.Mapping._abc_caches_clear()
         print(f"{isinstance([4, 4, 5], collections.abc.Mapping)=}")
+        print(f"{collections.abc.Mapping.__subclasses__()=}")
         collections.Counter([4, 4, 5])
 
     def test_cannot_instantiate_forward(self):
