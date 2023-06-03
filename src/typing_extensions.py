@@ -595,6 +595,8 @@ else:
         def __instancecheck__(cls, instance):
             # We need this method for situations where attributes are
             # assigned in __init__.
+            if cls is Protocol:
+                return Protocol in type(instance).__mro__
             if not getattr(cls, "_is_protocol", False):
                 # i.e., it's a concrete subclass of a protocol
                 return super().__instancecheck__(instance)
