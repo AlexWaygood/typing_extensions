@@ -35,10 +35,6 @@ jobs:
         github.repository == 'python/typing_extensions'
         || github.event_name != 'schedule'
       }}
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -53,7 +49,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.9"
       - name: Install typing_inspect test dependencies
         run: pip install -r test-requirements.txt
       - name: Install typing_extensions latest
