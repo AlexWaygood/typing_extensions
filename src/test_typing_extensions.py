@@ -3324,9 +3324,9 @@ class AnnotatedTests(BaseTestCase):
         collections.abc.Mapping._dump_registry()
         Protocol._dump_registry()
         collections.abc.Mapping._abc_caches_clear()
-        print(f"{isinstance([4, 4, 5], collections.abc.Mapping)=}")
         import gc
         gc.collect()
+        print(f"{isinstance([4, 4, 5], collections.abc.Mapping)=}")
         print(f"{collections.abc.Mapping.__subclasses__()=}")
         collections.Counter([4, 4, 5])
 
