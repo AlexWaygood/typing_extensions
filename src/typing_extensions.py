@@ -575,8 +575,6 @@ else:
             if not isinstance(other, type):
                 # Same error message as for issubclass(1, int).
                 raise TypeError('issubclass() arg 1 must be a class')
-            if cls is Protocol:
-                return Protocol in other.__mro__
             if (
                 getattr(cls, '_is_protocol', False)
                 and not _allow_reckless_class_checks()
