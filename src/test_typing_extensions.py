@@ -1943,10 +1943,13 @@ class ProtocolTests(BaseTestCase):
         class C:
             def x(self): pass
 
+        self.assertNotIsSubclass(object, Protocol)
         self.assertNotIsInstance(object(), Protocol)
 
+        self.assertNotIsSubclass(str, Protocol)
         self.assertNotIsInstance('foo', Protocol)
 
+        self.assertNotIsSubclass(C, Protocol)
         self.assertNotIsInstance(C(), Protocol)
 
         only_classes_allowed = r"issubclass\(\) arg 1 must be a class"
@@ -1980,13 +1983,19 @@ class ProtocolTests(BaseTestCase):
         # where `issubclass(X, <subclass>)` evaluates to True
         # doesn't influence the result of `issubclass(X, Protocol)`
 
+        self.assertIsSubclass(object, EmptyProtocol)
         self.assertIsInstance(object(), EmptyProtocol)
+        self.assertNotIsSubclass(object, Protocol)
         self.assertNotIsInstance(object(), Protocol)
 
+        self.assertIsSubclass(str, SupportsStartsWith)
         self.assertIsInstance('foo', SupportsStartsWith)
+        self.assertNotIsSubclass(str, Protocol)
         self.assertNotIsInstance('foo', Protocol)
 
+        self.assertIsSubclass(C, SupportsX)
         self.assertIsInstance(C(), SupportsX)
+        self.assertNotIsSubclass(C, Protocol)
         self.assertNotIsInstance(C(), Protocol)
 
     def test_protocols_issubclass_non_callable(self):
