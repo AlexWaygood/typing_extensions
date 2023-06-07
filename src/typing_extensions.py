@@ -105,6 +105,7 @@ _marker = _Sentinel()
 
 def _check_generic(cls, parameters, elen=_marker):
     """Check correct count for parameters of a generic cls (internal helper).
+
     This gives a nice error message in case of count mismatch.
     """
     if not elen:
@@ -138,10 +139,12 @@ else:
 
 
 def _collect_type_vars(types, typevar_types=None):
-    """Collect all type variable contained in types in order of
-    first appearance (lexicographic order). For example::
+    """Collect all type variables and parameter specifications in args
+    in order of first appearance (lexicographic order).
 
-        _collect_type_vars((T, List[S, T])) == (T, S)
+    For example::
+
+        assert _collect_parameters((T, Callable[P, T])) == (T, P)
     """
     if typevar_types is None:
         typevar_types = typing.TypeVar
@@ -186,9 +189,11 @@ else:
 
     class Any(metaclass=_AnyMeta):
         """Special type indicating an unconstrained type.
+
         - Any is compatible with every type.
         - Any assumed to have all methods.
         - All values assumed to be instances of Any.
+
         Note that all the above statements are true from the point of view of
         static type checkers. At runtime, Any should not be used with instance
         checks.
@@ -208,7 +213,6 @@ if hasattr(typing, 'Final') and sys.version_info[:2] >= (3, 7):
 # 3.7
 else:
     class _FinalForm(typing._SpecialForm, _root=True):
-
         def __repr__(self):
             return 'typing_extensions.' + self._name
 
@@ -217,20 +221,26 @@ else:
                                       f'{self._name} accepts only a single type.')
             return typing._GenericAlias(self, (item,))
 
-    Final = _FinalForm('Final',
-                       doc="""A special typing construct to indicate that a name
-                       cannot be re-assigned or overridden in a subclass.
-                       For example:
+    Final = _FinalForm(
+        'Final',
+        doc="""Special typing construct to indicate final names to type checkers.
 
-                           MAX_SIZE: Final = 9000
-                           MAX_SIZE += 1  # Error reported by type checker
+            A final name cannot be re-assigned or overridden in a subclass.
 
-                           class Connection:
-                               TIMEOUT: Final[int] = 10
-                           class FastConnector(Connection):
-                               TIMEOUT = 1  # Error reported by type checker
+            For example::
 
-                       There is no runtime checking of these properties.""")
+                MAX_SIZE: Final = 9000
+                MAX_SIZE += 1  # Error reported by type checker
+
+                class Connection:
+                    TIMEOUT: Final[int] = 10
+
+                class FastConnector(Connection):
+                    TIMEOUT = 1  # Error reported by type checker
+
+            There is no runtime checking of these properties.
+            """
+    )
 
 if sys.version_info >= (3, 11):
     final = typing.final
@@ -239,9 +249,12 @@ else:
     # before 3.11 to keep support for the __final__ attribute.
     # See https://bugs.python.org/issue46342
     def final(f):
-        """This decorator can be used to indicate to type checkers that
-        the decorated method cannot be overridden, and decorated class
-        cannot be subclassed. For example:
+        """Decorator to indicate final methods and final classes.
+
+        Use this decorator to indicate to type checkers that the decorated
+        method cannot be overridden, and decorated class cannot be subclassed.
+
+        For example::
 
             class Base:
                 @final
@@ -250,6 +263,7 @@ else:
             class Sub(Base):
                 def done(self) -> None:  # Error reported by type checker
                     ...
+
             @final
             class Leaf:
                 ...
@@ -257,8 +271,8 @@ else:
                 ...
 
         There is no runtime checking of these properties. The decorator
-        sets the ``__final__`` attribute to ``True`` on the decorated object
-        to allow runtime introspection.
+        attempts to set the ``__final__`` attribute to ``True`` on the decorated
+        object to allow runtime introspection.
         """
         try:
             f.__final__ = True
@@ -279,7 +293,7 @@ if sys.version_info >= (3, 10, 1):
     Literal = typing.Literal
 else:
     def _flatten_literal_params(parameters):
-        """An internal helper for Literal creation: flatten Literals among parameters"""
+        """Internal helper for Literal creation: flatten Literals among parameters."""
         params = []
         for p in parameters:
             if isinstance(p, _LiteralGenericAlias):
@@ -336,19 +350,28 @@ else:
 
             return _LiteralGenericAlias(self, parameters)
 
-    Literal = _LiteralForm(doc="""\
-                           A type that can be used to indicate to type checkers
-                           that the corresponding value has a value literally equivalent
-                           to the provided parameter. For example:
+    Literal = _LiteralForm(
+        doc="""Special typing form to define literal types (a.k.a. value types).
 
-                               var: Literal[4] = 4
+            This form can be used to indicate to type checkers that the corresponding
+            variable or function parameter has a value equivalent to the provided
+            literal (or one of several literals)::
 
-                           The type checker understands that 'var' is literally equal to
-                           the value 4 and no other value.
+                def validate_simple(data: Any) -> Literal[True]:  # always returns True
+                    ...
 
-                           Literal[...] cannot be subclassed. There is no runtime
-                           checking verifying that the parameter is actually a value
-                           instead of a type.""")
+                MODE = Literal['r', 'rb', 'w', 'wb']
+                def open_helper(file: str, mode: MODE) -> str:
+                    ...
+
+                open_helper('/some/path', 'r')  # Passes type check
+                open_helper('/other/path', 'typo')  # Error in type checker
+
+            Literal[...] cannot be subclassed. At runtime, an arbitrary value
+            is allowed as type argument to Literal[...], but type checkers may
+            impose restrictions.
+            """
+    )
 
 
 _overload_dummy = typing._overload_dummy
@@ -368,27 +391,29 @@ else:
         """Decorator for overloaded functions/methods.
 
         In a stub file, place two or more stub definitions for the same
-        function in a row, each decorated with @overload.  For example:
+        function in a row, each decorated with @overload.
 
-        @overload
-        def utf8(value: None) -> None: ...
-        @overload
-        def utf8(value: bytes) -> bytes: ...
-        @overload
-        def utf8(value: str) -> bytes: ...
+        For example::
+
+            @overload
+            def utf8(value: None) -> None: ...
+            @overload
+            def utf8(value: bytes) -> bytes: ...
+            @overload
+            def utf8(value: str) -> bytes: ...
 
         In a non-stub file (i.e. a regular .py file), do the same but
         follow it with an implementation.  The implementation should *not*
-        be decorated with @overload.  For example:
+        be decorated with @overload::
 
-        @overload
-        def utf8(value: None) -> None: ...
-        @overload
-        def utf8(value: bytes) -> bytes: ...
-        @overload
-        def utf8(value: str) -> bytes: ...
-        def utf8(value):
-            # implementation goes here
+            @overload
+            def utf8(value: None) -> None: ...
+            @overload
+            def utf8(value: bytes) -> bytes: ...
+            @overload
+            def utf8(value: str) -> bytes: ...
+            def utf8(value):
+                ...  # implementation goes here
 
         The overloads for a function can be retrieved at runtime using the
         get_overloads() function.
@@ -550,6 +575,7 @@ if sys.version_info >= (3, 12):
 else:
     def _allow_reckless_class_checks(depth=3):
         """Allow instance and class checks for special stdlib modules.
+
         The abc and functools modules indiscriminately call isinstance() and
         issubclass() on the whole MRO of a user class, which may contain protocols.
         """
@@ -716,14 +742,18 @@ else:
             # There is quite a lot of overlapping code with typing.Generic.
             # Unfortunately it is hard to avoid this on Python <3.8,
             # as the typing module on Python 3.7 doesn't let us subclass typing.Generic!
-            """Base class for protocol classes. Protocol classes are defined as::
+            """Base class for protocol classes.
+
+            Protocol classes are defined as::
 
                 class Proto(Protocol):
                     def meth(self) -> int:
                         ...
 
             Such classes are primarily used with static type checkers that recognize
-            structural subtyping (static duck-typing), for example::
+            structural subtyping (static duck-typing).
+
+            For example::
 
                 class C:
                     def meth(self) -> int:
@@ -736,7 +766,7 @@ else:
 
             See PEP 544 for details. Protocol classes decorated with
             @typing_extensions.runtime_checkable act
-            as simple-minded runtime-checkable protocols that check
+            as simple-minded runtime protocols that check
             only the presence of given attributes, ignoring their type signatures.
 
             Protocol classes can be generic, they are defined as::
@@ -745,6 +775,7 @@ else:
                     def meth(self) -> T:
                         ...
             """
+
             __slots__ = ()
             _is_protocol = True
             _is_runtime_protocol = False
@@ -807,12 +838,23 @@ else:
                     cls.__init__ = _no_init
 
     def runtime_checkable(cls):
-        """Mark a protocol class as a runtime protocol, so that it
-        can be used with isinstance() and issubclass(). Raise TypeError
-        if applied to a non-protocol class.
+        """Mark a protocol class as a runtime protocol.
 
-        This allows a simple-minded structural check very similar to the
-        one-offs in collections.abc such as Hashable.
+        Such protocol can be used with isinstance() and issubclass().
+        Raise TypeError if applied to a non-protocol class.
+        This allows a simple-minded structural check very similar to
+        one trick ponies in collections.abc such as Iterable.
+
+        For example::
+
+            @runtime_checkable
+            class Closable(Protocol):
+                def close(self): ...
+
+            assert isinstance(open('/some/file'), Closable)
+
+        Warning: this will check only the presence of the required methods,
+        not their type signatures!
         """
         if not (
             (isinstance(cls, _ProtocolMeta) or issubclass(cls, typing.Generic))
@@ -1117,17 +1159,17 @@ if hasattr(typing, "assert_type"):
 
 else:
     def assert_type(__val, __typ):
-        """Assert (to the type checker) that the value is of the given type.
+        """Ask a static type checker to confirm that the value is of the given type.
 
-        When the type checker encounters a call to assert_type(), it
+        At runtime this does nothing: it returns the first argument unchanged with no
+        checks or side effects, no matter the actual type of the argument.
+
+        When a static type checker encounters a call to assert_type(), it
         emits an error if the value is not of the specified type::
 
             def greet(name: str) -> None:
                 assert_type(name, str)  # ok
                 assert_type(name, int)  # type checker error
-
-        At runtime this returns the first argument unchanged and otherwise
-        does nothing.
         """
         return __val
 
@@ -1164,10 +1206,8 @@ else:
         """Return type hints for an object.
 
         This is often the same as obj.__annotations__, but it handles
-        forward references encoded as string literals, adds Optional[t] if a
-        default value equal to None is set and recursively replaces all
-        'Annotated[T, ...]', 'Required[T]' or 'NotRequired[T]' with 'T'
-        (unless 'include_extras=True').
+        forward references encoded as string literals and recursively replaces all
+        'Annotated[T, ...]' with 'T' (unless 'include_extras=True').
 
         The argument may be a module, class, method, or function. The annotations
         are returned as a dictionary. For classes, annotations include also
@@ -1184,7 +1224,8 @@ else:
         - If no dict arguments are passed, an attempt is made to use the
           globals from obj (or the respective module's globals for classes),
           and these are also used as the locals.  If the object does not appear
-          to have globals, an empty dictionary is used.
+          to have globals, an empty dictionary is used.  For classes, the search
+          order is globals first then locals.
 
         - If one dict argument is passed, it is used for both globals and
           locals.
@@ -1215,10 +1256,13 @@ else:
         """Runtime representation of an annotated type.
 
         At its core 'Annotated[t, dec1, dec2, ...]' is an alias for the type 't'
-        with extra annotations. The alias behaves like a normal typing alias,
-        instantiating is the same as instantiating the underlying type, binding
+        with extra annotations. The alias behaves like a normal typing alias.
+        Instantiating is the same as instantiating the underlying type; binding
         it to types is also the same.
+
+        The metadata itself is stored in a '__metadata__' attribute as a tuple.
         """
+
         def __init__(self, origin, metadata):
             if isinstance(origin, _AnnotatedAlias):
                 metadata = origin.__metadata__ + metadata
@@ -1251,36 +1295,52 @@ else:
             return hash((self.__origin__, self.__metadata__))
 
     class Annotated:
-        """Add context specific metadata to a type.
+        """Add context-specific metadata to a type.
 
         Example: Annotated[int, runtime_check.Unsigned] indicates to the
         hypothetical runtime_check module that this type is an unsigned int.
         Every other consumer of this type can ignore this metadata and treat
         this type as int.
 
-        The first argument to Annotated must be a valid type (and will be in
-        the __origin__ field), the remaining arguments are kept as a tuple in
-        the __extra__ field.
+        The first argument to Annotated must be a valid type.
 
         Details:
 
         - It's an error to call `Annotated` with less than two arguments.
+        - Access the metadata via the ``__metadata__`` attribute::
+
+            assert Annotated[int, '$'].__metadata__ == ('$',)
+
         - Nested Annotated are flattened::
 
-            Annotated[Annotated[T, Ann1, Ann2], Ann3] == Annotated[T, Ann1, Ann2, Ann3]
+            assert (
+                Annotated[Annotated[T, Ann1, Ann2], Ann3]
+                == Annotated[T, Ann1, Ann2, Ann3]
+            )
 
         - Instantiating an annotated type is equivalent to instantiating the
         underlying type::
 
-            Annotated[C, Ann1](5) == C(5)
+            assert Annotated[C, Ann1](5) == C(5)
 
         - Annotated can be used as a generic type alias::
 
             Optimized = Annotated[T, runtime.Optimize()]
-            Optimized[int] == Annotated[int, runtime.Optimize()]
+            assert Optimized[int] == Annotated[int, runtime.Optimize()]
 
             OptimizedList = Annotated[List[T], runtime.Optimize()]
-            OptimizedList[int] == Annotated[List[int], runtime.Optimize()]
+            assert OptimizedList[int] == Annotated[List[int], runtime.Optimize()]
+
+        - Annotated cannot be used with an unpacked TypeVarTuple::
+
+            Annotated[*Ts, Ann1]  # NOT valid
+
+          This would be equivalent to::
+
+            Annotated[T1, T2, T3, ..., Ann1]
+
+          where T1, T2 etc. are TypeVars, which would be invalid, because
+          only one type should be passed to Annotated.
         """
 
         __slots__ = ()
@@ -1330,17 +1390,19 @@ else:
     def get_origin(tp):
         """Get the unsubscripted version of a type.
 
-        This supports generic types, Callable, Tuple, Union, Literal, Final, ClassVar
-        and Annotated. Return None for unsupported types. Examples::
+        This supports generic types, Callable, Tuple, Union, Literal, Final, ClassVar,
+        Annotated, and others. Return None for unsupported types.
 
-            get_origin(Literal[42]) is Literal
-            get_origin(int) is None
-            get_origin(ClassVar[int]) is ClassVar
-            get_origin(Generic) is Generic
-            get_origin(Generic[T]) is Generic
-            get_origin(Union[T, int]) is Union
-            get_origin(List[Tuple[T, T]][int]) == list
-            get_origin(P.args) is P
+        Examples::
+
+            assert get_origin(Literal[42]) is Literal
+            assert get_origin(int) is None
+            assert get_origin(ClassVar[int]) is ClassVar
+            assert get_origin(Generic) is Generic
+            assert get_origin(Generic[T]) is Generic
+            assert get_origin(Union[T, int]) is Union
+            assert get_origin(List[Tuple[T, T]][int]) is list
+            assert get_origin(P.args) is P
         """
         if isinstance(tp, _AnnotatedAlias):
             return Annotated
@@ -1355,12 +1417,14 @@ else:
         """Get type arguments with all substitutions performed.
 
         For unions, basic simplifications used by Union constructor are performed.
+
         Examples::
-            get_args(Dict[str, int]) == (str, int)
-            get_args(int) == ()
-            get_args(Union[int, Union[T, int], str][int]) == (int, str)
-            get_args(Union[int, Tuple[T, int]][str]) == (int, Tuple[str, int])
-            get_args(Callable[[], T][int]) == ([], int)
+
+            assert get_args(Dict[str, int]) == (str, int)
+            assert get_args(int) == ()
+            assert get_args(Union[int, Union[T, int], str][int]) == (int, str)
+            assert get_args(Union[int, Tuple[T, int]][str]) == (int, Tuple[str, int])
+            assert get_args(Callable[[], T][int]) == ([], int)
         """
         if isinstance(tp, _AnnotatedAlias):
             return (tp.__origin__,) + tp.__metadata__
@@ -1374,45 +1438,50 @@ else:
         return ()
 
 
+_TYPEALIAS_DOC = """\
+Special form for marking type aliases.
+
+Use TypeAlias to indicate that an assignment should
+be recognized as a proper type alias definition by type
+checkers.
+
+For example::
+
+    Predicate: TypeAlias = Callable[..., bool]
+
+It's invalid when used anywhere except as in the example above.
+"""
+
+
+def _monkeypatch_docstring(docstring):
+    def decorator(func):
+        func.__doc__ = docstring
+        return func
+    return decorator
+
+
+class _ExtensionsSpecialForm(typing._SpecialForm, _root=True):
+    def __repr__(self):
+        return 'typing_extensions.' + self._name
+
+
 # 3.10+
 if hasattr(typing, 'TypeAlias'):
     TypeAlias = typing.TypeAlias
 # 3.9
 elif sys.version_info[:2] >= (3, 9):
-    class _TypeAliasForm(typing._SpecialForm, _root=True):
-        def __repr__(self):
-            return 'typing_extensions.' + self._name
-
-    @_TypeAliasForm
+    @_ExtensionsSpecialForm
+    @_monkeypatch_docstring(_TYPEALIAS_DOC)
     def TypeAlias(self, parameters):
-        """Special marker indicating that an assignment should
-        be recognized as a proper type alias definition by type
-        checkers.
-
-        For example::
-
-            Predicate: TypeAlias = Callable[..., bool]
-
-        It's invalid when used anywhere except as in the example above.
-        """
         raise TypeError(f"{self} is not subscriptable")
+
 # 3.7-3.8
 else:
     class _TypeAliasForm(typing._SpecialForm, _root=True):
         def __repr__(self):
             return 'typing_extensions.' + self._name
 
-    TypeAlias = _TypeAliasForm('TypeAlias',
-                               doc="""Special marker indicating that an assignment should
-                               be recognized as a proper type alias definition by type
-                               checkers.
-
-                               For example::
-
-                                   Predicate: TypeAlias = Callable[..., bool]
-
-                               It's invalid when used anywhere except as in the example
-                               above.""")
+    TypeAlias = _TypeAliasForm('TypeAlias', doc=_TYPEALIAS_DOC)
 
 
 def _set_default(type_param, default):
@@ -1447,7 +1516,44 @@ class _TypeVarLikeMeta(type):
 
 # Add default and infer_variance parameters from PEP 696 and 695
 class TypeVar(metaclass=_TypeVarLikeMeta):
-    """Type variable."""
+    """Type variable.
+
+    On Python 3.12+, the preferred way to construct a type variable is via the
+    dedicated syntax for generic functions, classes, and type aliases::
+
+        class Sequence[T]:  # T is a TypeVar
+            ...
+
+    This syntax can also be used to create bound and constrained type
+    variables::
+
+        class StrSequence[S: str]:  # S is a TypeVar bound to str
+            ...
+
+        # A is a TypeVar constrained to str or bytes
+        class StrOrBytesSequence[A: (str, bytes)]:
+            ...
+
+    On lower versions of Python, TypeVars must be created manually, like so::
+
+       T = TypeVar('T')              # Can be anything
+       S = TypeVar('S', bound=str)   # Can be any subtype of str
+       A = TypeVar('A', str, bytes)  # Must be exactly str or bytes
+
+    This mechanism can also be used to create reusable TypeVars on Python 3.12+,
+    if desired.
+
+    Type variables exist primarily for the benefit of static type
+    checkers.  They serve as the parameters for generic types as well
+    as for generic function and type alias definitions.
+
+    The variance of type variables is inferred by type checkers when they are created
+    through the type parameter syntax and when ``infer_variance=True`` is passed.
+    Manually created type variables may be explicitly marked covariant or
+    contravariant by passing ``covariant=True`` or ``contravariant=True``.
+    By default, manually created type variables are invariant. See PEP 484
+    and PEP 695 for more details.
+    """
 
     _backported_typevarlike = typing.TypeVar
 
@@ -1494,13 +1600,14 @@ else:
 
         Given a ParamSpec object P, P.args is an instance of ParamSpecArgs.
 
-        ParamSpecArgs objects have a reference back to their ParamSpec:
+        ParamSpecArgs objects have a reference back to their ParamSpec::
 
-        P.args.__origin__ is P
+            P.args.__origin__ is P
 
         This type is meant for runtime introspection and has no special meaning to
         static type checkers.
         """
+
         def __init__(self, origin):
             self.__origin__ = origin
 
@@ -1517,13 +1624,14 @@ else:
 
         Given a ParamSpec object P, P.kwargs is an instance of ParamSpecKwargs.
 
-        ParamSpecKwargs objects have a reference back to their ParamSpec:
+        ParamSpecKwargs objects have a reference back to their ParamSpec::
 
-        P.kwargs.__origin__ is P
+            P.kwargs.__origin__ is P
 
         This type is meant for runtime introspection and has no special meaning to
         static type checkers.
         """
+
         def __init__(self, origin):
             self.__origin__ = origin
 
@@ -1535,13 +1643,67 @@ else:
                 return NotImplemented
             return self.__origin__ == other.__origin__
 
+
+_PARAM_SPEC_DOC = """\
+Parameter specification variable.
+
+On Python 3.12+, the preferred way to construct a parameter specification is via
+the dedicated syntax for generic functions, classes, and type aliases, where
+the use of '**' creates a parameter specification::
+
+    type IntFunc[**P] = Callable[P, int]
+
+On lower versions of Python, ParamSpecs must be created manually::
+
+   P = ParamSpec('P')
+
+Parameter specification variables exist primarily for the benefit of static
+type checkers.  They are used to forward the parameter types of one
+callable to another callable, a pattern commonly found in higher order
+functions and decorators.  They are only valid when used in ``Concatenate``,
+or s the first argument to ``Callable``. In Python 3.10 and higher,
+they are also supported in user-defined Generics at runtime.
+See class Generic for more information on generic types.  An
+example for annotating a decorator::
+
+   T = TypeVar('T')
+   P = ParamSpec('P')
+
+   def add_logging(f: Callable[P, T]) -> Callable[P, T]:
+       '''A type-safe decorator to add logging to a function.'''
+       def inner(*args: P.args, **kwargs: P.kwargs) -> T:
+           logging.info(f'{f.__name__} was called')
+           return f(*args, **kwargs)
+       return inner
+
+   @add_logging
+   def add_two(x: float, y: float) -> float:
+       '''Add two numbers together.'''
+       return x + y
+
+Parameter specification variables defined with covariant=True or
+contravariant=True can be used to declare covariant or contravariant
+generic types.  These keyword arguments are valid, but their actual semantics
+are yet to be decided.  See PEP 612 for details.
+
+Parameter specification variables can be introspected. e.g.::
+
+   P.__name__ == 'T'
+   P.__bound__ == None
+   P.__covariant__ == False
+   P.__contravariant__ == False
+
+Note that only parameter specification variables defined in global scope can
+be pickled.
+"""
+
+
 # 3.10+
 if hasattr(typing, 'ParamSpec'):
 
     # Add default parameter - PEP 696
     class ParamSpec(metaclass=_TypeVarLikeMeta):
-        """Parameter specification."""
-
+        __doc__ = _PARAM_SPEC_DOC
         _backported_typevarlike = typing.ParamSpec
 
         def __new__(cls, name, *, bound=None,
@@ -1571,51 +1733,7 @@ else:
 
     # Inherits from list as a workaround for Callable checks in Python < 3.9.2.
     class ParamSpec(list, _DefaultMixin):
-        """Parameter specification variable.
-
-        Usage::
-
-           P = ParamSpec('P')
-
-        Parameter specification variables exist primarily for the benefit of static
-        type checkers.  They are used to forward the parameter types of one
-        callable to another callable, a pattern commonly found in higher order
-        functions and decorators.  They are only valid when used in ``Concatenate``,
-        or s the first argument to ``Callable``. In Python 3.10 and higher,
-        they are also supported in user-defined Generics at runtime.
-        See class Generic for more information on generic types.  An
-        example for annotating a decorator::
-
-           T = TypeVar('T')
-           P = ParamSpec('P')
-
-           def add_logging(f: Callable[P, T]) -> Callable[P, T]:
-               '''A type-safe decorator to add logging to a function.'''
-               def inner(*args: P.args, **kwargs: P.kwargs) -> T:
-                   logging.info(f'{f.__name__} was called')
-                   return f(*args, **kwargs)
-               return inner
-
-           @add_logging
-           def add_two(x: float, y: float) -> float:
-               '''Add two numbers together.'''
-               return x + y
-
-        Parameter specification variables defined with covariant=True or
-        contravariant=True can be used to declare covariant or contravariant
-        generic types.  These keyword arguments are valid, but their actual semantics
-        are yet to be decided.  See PEP 612 for details.
-
-        Parameter specification variables can be introspected. e.g.:
-
-           P.__name__ == 'T'
-           P.__bound__ == None
-           P.__covariant__ == False
-           P.__contravariant__ == False
-
-        Note that only parameter specification variables defined in global scope can
-        be pickled.
-        """
+        __doc__ = _PARAM_SPEC_DOC
 
         # Trick Generic __parameters__.
         __class__ = typing.TypeVar
@@ -1721,24 +1839,30 @@ def _concatenate_getitem(self, parameters):
     return _ConcatenateGenericAlias(self, parameters)
 
 
+_CONCATENATE_DOC = """\
+Special form for annotating higher-order functions.
+
+``Concatenate`` can be used in conjunction with ``ParamSpec`` and
+``Callable`` to represent a higher-order function which adds, removes or
+transforms the parameters of a callable.
+
+For example::
+
+    Callable[Concatenate[int, P], int]
+
+See PEP 612 for detailed information.
+"""
+
+
 # 3.10+
 if hasattr(typing, 'Concatenate'):
     Concatenate = typing.Concatenate
     _ConcatenateGenericAlias = typing._ConcatenateGenericAlias  # noqa: F811
 # 3.9
 elif sys.version_info[:2] >= (3, 9):
-    @_TypeAliasForm
+    @_ExtensionsSpecialForm
+    @_monkeypatch_docstring(_CONCATENATE_DOC)
     def Concatenate(self, parameters):
-        """Used in conjunction with ``ParamSpec`` and ``Callable`` to represent a
-        higher order function which adds, removes or transforms parameters of a
-        callable.
-
-        For example::
-
-           Callable[Concatenate[int, P], int]
-
-        See PEP 612 for detailed information.
-        """
         return _concatenate_getitem(self, parameters)
 # 3.7-8
 else:
@@ -1749,72 +1873,64 @@ else:
         def __getitem__(self, parameters):
             return _concatenate_getitem(self, parameters)
 
-    Concatenate = _ConcatenateForm(
-        'Concatenate',
-        doc="""Used in conjunction with ``ParamSpec`` and ``Callable`` to represent a
-        higher order function which adds, removes or transforms parameters of a
-        callable.
+    Concatenate = _ConcatenateForm('Concatenate', doc=_CONCATENATE_DOC)
 
-        For example::
 
-           Callable[Concatenate[int, P], int]
+_TYPEGUARD_DOC = """\
+Special typing construct for marking user-defined type guard functions.
 
-        See PEP 612 for detailed information.
-        """)
+``TypeGuard`` can be used to annotate the return type of a user-defined
+type guard function.  ``TypeGuard`` only accepts a single type argument.
+At runtime, functions marked this way should return a boolean.
+
+``TypeGuard`` aims to benefit *type narrowing* -- a technique used by static
+type checkers to determine a more precise type of an expression within a
+program's code flow.  Usually type narrowing is done by analyzing
+conditional code flow and applying the narrowing to a block of code.  The
+conditional expression here is sometimes referred to as a "type guard".
+
+Sometimes it would be convenient to use a user-defined boolean function
+as a type guard.  Such a function should use ``TypeGuard[...]`` as its
+return type to alert static type checkers to this intention.
+
+Using  ``-> TypeGuard`` tells the static type checker that for a given
+function:
+
+1. The return value is a boolean.
+2. If the return value is ``True``, the type of its argument
+   is the type inside ``TypeGuard``.
+
+   For example::
+
+       def is_str(val: Union[str, float]):
+           # "isinstance" type guard
+           if isinstance(val, str):
+               # Type of ``val`` is narrowed to ``str``
+               ...
+           else:
+               # Else, type of ``val`` is narrowed to ``float``.
+               ...
+
+Strict type narrowing is not enforced -- ``TypeB`` need not be a narrower
+form of ``TypeA`` (it can even be a wider form) and this may lead to
+type-unsafe results.  The main reason is to allow for things like
+narrowing ``List[object]`` to ``List[str]`` even though the latter is not
+a subtype of the former, since ``List`` is invariant.  The responsibility of
+writing type-safe type guards is left to the user.
+
+``TypeGuard`` also works with type variables.  For more information, see
+PEP 647 (User-Defined Type Guards).
+"""
+
 
 # 3.10+
 if hasattr(typing, 'TypeGuard'):
     TypeGuard = typing.TypeGuard
 # 3.9
 elif sys.version_info[:2] >= (3, 9):
-    class _TypeGuardForm(typing._SpecialForm, _root=True):
-        def __repr__(self):
-            return 'typing_extensions.' + self._name
-
-    @_TypeGuardForm
+    @_ExtensionsSpecialForm
+    @_monkeypatch_docstring(_TYPEGUARD_DOC)
     def TypeGuard(self, parameters):
-        """Special typing form used to annotate the return type of a user-defined
-        type guard function.  ``TypeGuard`` only accepts a single type argument.
-        At runtime, functions marked this way should return a boolean.
-
-        ``TypeGuard`` aims to benefit *type narrowing* -- a technique used by static
-        type checkers to determine a more precise type of an expression within a
-        program's code flow.  Usually type narrowing is done by analyzing
-        conditional code flow and applying the narrowing to a block of code.  The
-        conditional expression here is sometimes referred to as a "type guard".
-
-        Sometimes it would be convenient to use a user-defined boolean function
-        as a type guard.  Such a function should use ``TypeGuard[...]`` as its
-        return type to alert static type checkers to this intention.
-
-        Using  ``-> TypeGuard`` tells the static type checker that for a given
-        function:
-
-        1. The return value is a boolean.
-        2. If the return value is ``True``, the type of its argument
-        is the type inside ``TypeGuard``.
-
-        For example::
-
-            def is_str(val: Union[str, float]):
-                # "isinstance" type guard
-                if isinstance(val, str):
-                    # Type of ``val`` is narrowed to ``str``
-                    ...
-                else:
-                    # Else, type of ``val`` is narrowed to ``float``.
-                    ...
-
-        Strict type narrowing is not enforced -- ``TypeB`` need not be a narrower
-        form of ``TypeA`` (it can even be a wider form) and this may lead to
-        type-unsafe results.  The main reason is to allow for things like
-        narrowing ``List[object]`` to ``List[str]`` even though the latter is not
-        a subtype of the former, since ``List`` is invariant.  The responsibility of
-        writing type-safe type guards is left to the user.
-
-        ``TypeGuard`` also works with type variables.  For more information, see
-        PEP 647 (User-Defined Type Guards).
-        """
         item = typing._type_check(parameters, f'{self} accepts only a single type.')
         return typing._GenericAlias(self, (item,))
 # 3.7-3.8
@@ -1829,50 +1945,7 @@ else:
                                       f'{self._name} accepts only a single type')
             return typing._GenericAlias(self, (item,))
 
-    TypeGuard = _TypeGuardForm(
-        'TypeGuard',
-        doc="""Special typing form used to annotate the return type of a user-defined
-        type guard function.  ``TypeGuard`` only accepts a single type argument.
-        At runtime, functions marked this way should return a boolean.
-
-        ``TypeGuard`` aims to benefit *type narrowing* -- a technique used by static
-        type checkers to determine a more precise type of an expression within a
-        program's code flow.  Usually type narrowing is done by analyzing
-        conditional code flow and applying the narrowing to a block of code.  The
-        conditional expression here is sometimes referred to as a "type guard".
-
-        Sometimes it would be convenient to use a user-defined boolean function
-        as a type guard.  Such a function should use ``TypeGuard[...]`` as its
-        return type to alert static type checkers to this intention.
-
-        Using  ``-> TypeGuard`` tells the static type checker that for a given
-        function:
-
-        1. The return value is a boolean.
-        2. If the return value is ``True``, the type of its argument
-        is the type inside ``TypeGuard``.
-
-        For example::
-
-            def is_str(val: Union[str, float]):
-                # "isinstance" type guard
-                if isinstance(val, str):
-                    # Type of ``val`` is narrowed to ``str``
-                    ...
-                else:
-                    # Else, type of ``val`` is narrowed to ``float``.
-                    ...
-
-        Strict type narrowing is not enforced -- ``TypeB`` need not be a narrower
-        form of ``TypeA`` (it can even be a wider form) and this may lead to
-        type-unsafe results.  The main reason is to allow for things like
-        narrowing ``List[object]`` to ``List[str]`` even though the latter is not
-        a subtype of the former, since ``List`` is invariant.  The responsibility of
-        writing type-safe type guards is left to the user.
-
-        ``TypeGuard`` also works with type variables.  For more information, see
-        PEP 647 (User-Defined Type Guards).
-        """)
+    TypeGuard = _TypeGuardForm('TypeGuard', doc=_TYPEGUARD_DOC)
 
 
 # Vendored from cpython typing._SpecialFrom
@@ -1928,16 +2001,23 @@ else:
 
         Example::
 
-          from typing_extensions import LiteralString
+            from typing_extensions import LiteralString
 
-          def query(sql: LiteralString) -> ...:
-              ...
+            def run_query(sql: LiteralString) -> None:
+                ...
 
-          query("SELECT * FROM table")  # ok
-          query(f"SELECT * FROM {input()}")  # not ok
+            def caller(arbitrary_string: str, literal_string: LiteralString) -> None:
+                run_query("SELECT * FROM students")  # ok
+                run_query(literal_string)  # ok
+                run_query("SELECT * FROM " + literal_string)  # ok
+                run_query(arbitrary_string)  # type checker error
+                run_query(  # type checker error
+                    f"SELECT * FROM students WHERE name = {arbitrary_string}"
+                )
 
-        See PEP 675 for details.
-
+        Only string literals and other LiteralStrings are compatible
+        with LiteralString. This provides a tool to help prevent
+        security issues such as SQL injection.
         """
         raise TypeError(f"{self} is not subscriptable")
 
@@ -1951,15 +2031,17 @@ else:
 
         Example::
 
-          from typing import Self
+            from typing_extensions import Self
 
-          class ReturnsSelf:
-              def parse(self, data: bytes) -> Self:
-                  ...
-                  return self
+            class Foo:
+                def return_self(self) -> Self:
+                    ...
+                    return self
 
+        This is especially useful for:
+            - classmethods that are used as alternative constructors
+            - annotating an `__enter__` method which returns self
         """
-
         raise TypeError(f"{self} is not subscriptable")
 
 
@@ -1987,54 +2069,59 @@ else:
                         print("It's a str")
                     case _:
                         never_call_me(arg)  # ok, arg is of type Never
-
         """
-
         raise TypeError(f"{self} is not subscriptable")
+
+
+_REQUIRED_DOC = """\
+Special typing construct to mark a TypedDict key as required.
+
+This is mainly useful for total=False TypedDicts.
+
+For example::
+
+    class Movie(TypedDict, total=False):
+        title: Required[str]
+        year: int
+
+    m = Movie(
+        title='The Matrix',  # typechecker error if key is omitted
+        year=1999,
+    )
+
+There is no runtime checking that a required key is actually provided
+when instantiating a related TypedDict.
+"""
+
+_NOT_REQUIRED_DOC = """\
+Special typing construct to mark a TypedDict key as potentially missing.
+
+For example::
+
+    class Movie(TypedDict):
+        title: str
+        year: NotRequired[int]
+
+    m = Movie(
+        title='The Matrix',  # typechecker error if key is omitted
+        year=1999,
+    )
+"""
 
 
 if hasattr(typing, 'Required'):
     Required = typing.Required
     NotRequired = typing.NotRequired
 elif sys.version_info[:2] >= (3, 9):
-    class _ExtensionsSpecialForm(typing._SpecialForm, _root=True):
-        def __repr__(self):
-            return 'typing_extensions.' + self._name
-
     @_ExtensionsSpecialForm
+    @_monkeypatch_docstring(_REQUIRED_DOC)
     def Required(self, parameters):
-        """A special typing construct to mark a key of a total=False TypedDict
-        as required. For example:
-
-            class Movie(TypedDict, total=False):
-                title: Required[str]
-                year: int
-
-            m = Movie(
-                title='The Matrix',  # typechecker error if key is omitted
-                year=1999,
-            )
-
-        There is no runtime checking that a required key is actually provided
-        when instantiating a related TypedDict.
-        """
         item = typing._type_check(parameters, f'{self._name} accepts only a single type.')
         return typing._GenericAlias(self, (item,))
 
     @_ExtensionsSpecialForm
+    @_monkeypatch_docstring(_NOT_REQUIRED_DOC)
     def NotRequired(self, parameters):
-        """A special typing construct to mark a key of a TypedDict as
-        potentially missing. For example:
-
-            class Movie(TypedDict):
-                title: str
-                year: NotRequired[int]
-
-            m = Movie(
-                title='The Matrix',  # typechecker error if key is omitted
-                year=1999,
-            )
-        """
         item = typing._type_check(parameters, f'{self._name} accepts only a single type.')
         return typing._GenericAlias(self, (item,))
 
@@ -2048,78 +2135,55 @@ else:
                                       f'{self._name} accepts only a single type.')
             return typing._GenericAlias(self, (item,))
 
-    Required = _RequiredForm(
-        'Required',
-        doc="""A special typing construct to mark a key of a total=False TypedDict
-        as required. For example:
-
-            class Movie(TypedDict, total=False):
-                title: Required[str]
-                year: int
-
-            m = Movie(
-                title='The Matrix',  # typechecker error if key is omitted
-                year=1999,
-            )
-
-        There is no runtime checking that a required key is actually provided
-        when instantiating a related TypedDict.
-        """)
-    NotRequired = _RequiredForm(
-        'NotRequired',
-        doc="""A special typing construct to mark a key of a TypedDict as
-        potentially missing. For example:
-
-            class Movie(TypedDict):
-                title: str
-                year: NotRequired[int]
-
-            m = Movie(
-                title='The Matrix',  # typechecker error if key is omitted
-                year=1999,
-            )
-        """)
+    Required = _RequiredForm('Required', doc=_REQUIRED_DOC)
+    NotRequired = _RequiredForm('NotRequired', doc=_NOT_REQUIRED_DOC)
 
 
 _UNPACK_DOC = """\
 Type unpack operator.
 
 The type unpack operator takes the child types from some container type,
-such as `tuple[int, str]` or a `TypeVarTuple`, and 'pulls them out'. For
-example:
+such as `tuple[int, str]` or a `TypeVarTuple`, and 'pulls them out'.
 
-  # For some generic class `Foo`:
-  Foo[Unpack[tuple[int, str]]]  # Equivalent to Foo[int, str]
+For example::
 
-  Ts = TypeVarTuple('Ts')
-  # Specifies that `Bar` is generic in an arbitrary number of types.
-  # (Think of `Ts` as a tuple of an arbitrary number of individual
-  #  `TypeVar`s, which the `Unpack` is 'pulling out' directly into the
-  #  `Generic[]`.)
-  class Bar(Generic[Unpack[Ts]]): ...
-  Bar[int]  # Valid
-  Bar[int, str]  # Also valid
+    # For some generic class `Foo`:
+    Foo[Unpack[tuple[int, str]]]  # Equivalent to Foo[int, str]
 
-From Python 3.11, this can also be done using the `*` operator:
+    Ts = TypeVarTuple('Ts')
+    # Specifies that `Bar` is generic in an arbitrary number of types.
+    # (Think of `Ts` as a tuple of an arbitrary number of individual
+    #  `TypeVar`s, which the `Unpack` is 'pulling out' directly into the
+    #  `Generic[]`.)
+    class Bar(Generic[Unpack[Ts]]): ...
+    Bar[int]  # Valid
+    Bar[int, str]  # Also valid
+
+From Python 3.11, this can also be done using the `*` operator::
 
     Foo[*tuple[int, str]]
     class Bar(Generic[*Ts]): ...
 
+And from Python 3.12, it can be done using built-in syntax for generics::
+
+    Foo[*tuple[int, str]]
+    class Bar[*Ts]: ...
+
 The operator can also be used along with a `TypedDict` to annotate
-`**kwargs` in a function signature. For instance:
+`**kwargs` in a function signature::
 
-  class Movie(TypedDict):
-    name: str
-    year: int
+    class Movie(TypedDict):
+        name: str
+        year: int
 
-  # This function expects two keyword arguments - *name* of type `str` and
-  # *year* of type `int`.
-  def foo(**kwargs: Unpack[Movie]): ...
+    # This function expects two keyword arguments - *name* of type `str` and
+    # *year* of type `int`.
+    def foo(**kwargs: Unpack[Movie]): ...
 
 Note that there is only some runtime checking of this operator. Not
 everything the runtime allows may be accepted by static type checkers.
 
-For more information, see PEP 646 and PEP 692.
+For more information, see PEPs 646 and 692.
 """
 
 
@@ -2130,18 +2194,11 @@ if sys.version_info >= (3, 12):  # PEP 692 changed the repr of Unpack[]
         return get_origin(obj) is Unpack
 
 elif sys.version_info[:2] >= (3, 9):
-    class _UnpackSpecialForm(typing._SpecialForm, _root=True):
-        def __init__(self, getitem):
-            super().__init__(getitem)
-            self.__doc__ = _UNPACK_DOC
-
-        def __repr__(self):
-            return 'typing_extensions.' + self._name
-
     class _UnpackAlias(typing._GenericAlias, _root=True):
         __class__ = typing.TypeVar
 
-    @_UnpackSpecialForm
+    @_ExtensionsSpecialForm
+    @_monkeypatch_docstring(_UNPACK_DOC)
     def Unpack(self, parameters):
         item = typing._type_check(parameters, f'{self._name} accepts only a single type.')
         return _UnpackAlias(self, (item,))
@@ -2167,13 +2224,62 @@ else:
     def _is_unpack(obj):
         return isinstance(obj, _UnpackAlias)
 
+_TYPEVARTUPLE_DOC = """\
+Type variable tuple.
+
+On Python 3.12+, the preferred way to construct a type variable tuple is via the
+dedicated syntax for generic functions, classes, and type aliases, where a single
+'*' indicates a type variable tuple::
+
+    def move_first_element_to_last[T, *Ts](tup: tuple[T, *Ts]) -> tuple[*Ts, T]:
+        return (*tup[1:], tup[0])
+
+On older versions of Python, TypeVarTuples must be created manually::
+
+    Ts = TypeVarTuple('Ts')
+
+In the same way that a normal type variable is a stand-in for a single
+type such as ``int``, a type variable *tuple* is a stand-in for a *tuple*
+type such as ``Tuple[int, str]``.
+
+Type variable tuples can be used in ``Generic`` declarations.
+Consider the following example::
+
+    class Array(Generic[*Ts]): ...
+
+The ``Ts`` type variable tuple here behaves like ``tuple[T1, T2]``,
+where ``T1`` and ``T2`` are type variables. To use these type variables
+as type parameters of ``Array``, we must *unpack* the type variable tuple using
+the star operator: ``*Ts``. The signature of ``Array`` then behaves
+as if we had simply written ``class Array(Generic[T1, T2]): ...``.
+In contrast to ``Generic[T1, T2]``, however, ``Generic[*Shape]`` allows
+us to parameterise the class with an *arbitrary* number of type parameters.
+
+Type variable tuples can be used anywhere a normal ``TypeVar`` can.
+This includes class definitions, as shown above, as well as function
+signatures and variable annotations::
+
+    class Array(Generic[*Ts]):
+
+        def __init__(self, shape: Tuple[*Ts]):
+            self._shape: Tuple[*Ts] = shape
+
+        def get_shape(self) -> Tuple[*Ts]:
+            return self._shape
+
+    shape = (Height(480), Width(640))
+    x: Array[Height, Width] = Array(shape)
+    y = abs(x)  # Inferred type is Array[Height, Width]
+    z = x + x   #        ...    is Array[Height, Width]
+    x.get_shape()  #     ...    is tuple[Height, Width]
+"""
+
 
 if hasattr(typing, "TypeVarTuple"):  # 3.11+
 
     # Add default parameter - PEP 696
     class TypeVarTuple(metaclass=_TypeVarLikeMeta):
-        """Type variable tuple."""
-
+        __doc__ = _TYPEVARTUPLE_DOC
         _backported_typevarlike = typing.TypeVarTuple
 
         def __new__(cls, name, *, default=_marker):
@@ -2187,48 +2293,7 @@ if hasattr(typing, "TypeVarTuple"):  # 3.11+
 
 else:
     class TypeVarTuple(_DefaultMixin):
-        """Type variable tuple.
-
-        Usage::
-
-            Ts = TypeVarTuple('Ts')
-
-        In the same way that a normal type variable is a stand-in for a single
-        type such as ``int``, a type variable *tuple* is a stand-in for a *tuple*
-        type such as ``Tuple[int, str]``.
-
-        Type variable tuples can be used in ``Generic`` declarations.
-        Consider the following example::
-
-            class Array(Generic[*Ts]): ...
-
-        The ``Ts`` type variable tuple here behaves like ``tuple[T1, T2]``,
-        where ``T1`` and ``T2`` are type variables. To use these type variables
-        as type parameters of ``Array``, we must *unpack* the type variable tuple using
-        the star operator: ``*Ts``. The signature of ``Array`` then behaves
-        as if we had simply written ``class Array(Generic[T1, T2]): ...``.
-        In contrast to ``Generic[T1, T2]``, however, ``Generic[*Shape]`` allows
-        us to parameterise the class with an *arbitrary* number of type parameters.
-
-        Type variable tuples can be used anywhere a normal ``TypeVar`` can.
-        This includes class definitions, as shown above, as well as function
-        signatures and variable annotations::
-
-            class Array(Generic[*Ts]):
-
-                def __init__(self, shape: Tuple[*Ts]):
-                    self._shape: Tuple[*Ts] = shape
-
-                def get_shape(self) -> Tuple[*Ts]:
-                    return self._shape
-
-            shape = (Height(480), Width(640))
-            x: Array[Height, Width] = Array(shape)
-            y = abs(x)  # Inferred type is Array[Height, Width]
-            z = x + x   #        ...    is Array[Height, Width]
-            x.get_shape()  #     ...    is tuple[Height, Width]
-
-        """
+        __doc__ = _TYPEVARTUPLE_DOC
 
         # Trick Generic __parameters__.
         __class__ = typing.TypeVar
@@ -2276,12 +2341,11 @@ else:
             x: int = 1
             reveal_type(x)
 
-        Running a static type checker (e.g., ``mypy``) on this example
+        Running a static type checker (e.g., mypy) on this example
         will produce output similar to 'Revealed type is "builtins.int"'.
 
         At runtime, the function prints the runtime type of the
         argument and returns it unchanged.
-
         """
         print(f"Runtime type is {type(__obj).__name__!r}", file=sys.stderr)
         return __obj
@@ -2291,7 +2355,7 @@ if hasattr(typing, "assert_never"):
     assert_never = typing.assert_never
 else:
     def assert_never(__arg: Never) -> Never:
-        """Assert to the type checker that a line of code is unreachable.
+        """Statically assert that a line of code is unreachable.
 
         Example::
 
@@ -2308,7 +2372,6 @@ else:
         reachable, it will emit an error.
 
         At runtime, this throws an exception when called.
-
         """
         raise AssertionError("Expected code to be unreachable")
 
@@ -2329,18 +2392,14 @@ else:
         ] = (),
         **kwargs: typing.Any,
     ) -> typing.Callable[[T], T]:
-        """Decorator that marks a function, class, or metaclass as providing
-        dataclass-like behavior.
+        """Decorator to mark an object as providing dataclass-like behaviour.
 
-        Example:
+        The decorator can be applied to a function, class, or metaclass.
 
-            from typing_extensions import dataclass_transform
+        Example usage with a decorator function::
 
-            _T = TypeVar("_T")
-
-            # Used on a decorator function
             @dataclass_transform()
-            def create_model(cls: type[_T]) -> type[_T]:
+            def create_model[T](cls: type[T]) -> type[T]:
                 ...
                 return cls
 
@@ -2349,7 +2408,8 @@ else:
                 id: int
                 name: str
 
-            # Used on a base class
+        On a base class::
+
             @dataclass_transform()
             class ModelBase: ...
 
@@ -2357,7 +2417,8 @@ else:
                 id: int
                 name: str
 
-            # Used on a metaclass
+        On a metaclass::
+
             @dataclass_transform()
             class ModelMeta(type): ...
 
@@ -2367,28 +2428,31 @@ else:
                 id: int
                 name: str
 
-        Each of the ``CustomerModel`` classes defined in this example will now
-        behave similarly to a dataclass created with the ``@dataclasses.dataclass``
-        decorator. For example, the type checker will synthesize an ``__init__``
-        method.
+        The ``CustomerModel`` classes defined above will
+        be treated by type checkers similarly to classes created with
+        ``@dataclasses.dataclass``.
+        For example, type checkers will assume these classes have
+        ``__init__`` methods that accept ``id`` and ``name``.
 
         The arguments to this decorator can be used to customize this behavior:
         - ``eq_default`` indicates whether the ``eq`` parameter is assumed to be
-          True or False if it is omitted by the caller.
+            ``True`` or ``False`` if it is omitted by the caller.
         - ``order_default`` indicates whether the ``order`` parameter is
-          assumed to be True or False if it is omitted by the caller.
+            assumed to be True or False if it is omitted by the caller.
         - ``kw_only_default`` indicates whether the ``kw_only`` parameter is
-          assumed to be True or False if it is omitted by the caller.
+            assumed to be True or False if it is omitted by the caller.
         - ``frozen_default`` indicates whether the ``frozen`` parameter is
-          assumed to be True or False if it is omitted by the caller.
+            assumed to be True or False if it is omitted by the caller.
         - ``field_specifiers`` specifies a static list of supported classes
-          or functions that describe fields, similar to ``dataclasses.field()``.
+            or functions that describe fields, similar to ``dataclasses.field()``.
+        - Arbitrary other keyword arguments are accepted in order to allow for
+            possible future extensions.
 
         At runtime, this decorator records its arguments in the
         ``__dataclass_transform__`` attribute on the decorated object.
+        It has no other runtime effect.
 
-        See PEP 681 for details.
-
+        See PEP 681 for more details.
         """
         def decorator(cls_or_fn):
             cls_or_fn.__dataclass_transform__ = {
@@ -2411,7 +2475,7 @@ else:
     def override(__arg: _F) -> _F:
         """Indicate that a method is intended to override a method in a base class.
 
-        Usage:
+        Usage::
 
             class Base:
                 def method(self) -> None: ...
@@ -2423,16 +2487,15 @@ else:
                     super().method()
 
         When this decorator is applied to a method, the type checker will
-        validate that it overrides a method with the same name on a base class.
-        This helps prevent bugs that may occur when a base class is changed
-        without an equivalent change to a child class.
+        validate that it overrides a method or attribute with the same name on a
+        base class.  This helps prevent bugs that may occur when a base class is
+        changed without an equivalent change to a child class.
 
-        There is no runtime checking of these properties. The decorator
-        sets the ``__override__`` attribute to ``True`` on the decorated object
-        to allow runtime introspection.
+        There is no runtime checking of this property. The decorator attempts to
+        set the ``__override__`` attribute to ``True`` on the decorated object to
+        allow runtime introspection.
 
         See PEP 698 for details.
-
         """
         try:
             __arg.__override__ = True
@@ -2457,7 +2520,7 @@ else:
     ) -> typing.Callable[[_T], _T]:
         """Indicate that a class, function or overload is deprecated.
 
-        Usage:
+        Usage::
 
             @deprecated("Use B instead")
             class A:
@@ -2491,7 +2554,6 @@ else:
         exist on the overload as returned by ``get_overloads()``.
 
         See PEP 702 for details.
-
         """
         def decorator(__arg: _T) -> _T:
             if category is None:
@@ -2650,7 +2712,6 @@ else:
         or use ABC registration. This ABC provides no methods, because
         there is no Python-accessible methods shared by pre-3.12 buffer
         classes. It is useful primarily for static checks.
-
         """
 
     # As a courtesy, register the most common stdlib buffer classes.
@@ -2701,16 +2762,24 @@ if sys.version_info >= (3, 11):
     NewType = typing.NewType
 else:
     class NewType:
-        """NewType creates simple unique types with almost zero
-        runtime overhead. NewType(name, tp) is considered a subtype of tp
+        """NewType creates simple unique types with almost zero runtime overhead.
+
+        NewType(name, tp) is considered a subtype of tp
         by static type checkers. At runtime, NewType(name, tp) returns
-        a dummy callable that simply returns its argument. Usage::
+        a dummy callable that simply returns its argument.
+
+        Usage::
+
             UserId = NewType('UserId', int)
+
             def name_by_id(user_id: UserId) -> str:
                 ...
+
             UserId('user')          # Fails type check
+
             name_by_id(42)          # Fails type check
             name_by_id(UserId(42))  # OK
+
             num = UserId(5) + 1     # type: int
         """
 
@@ -2775,11 +2844,11 @@ else:
     class TypeAliasType:
         """Create named, parameterized type aliases.
 
-        This provides a backport of the new `type` statement in Python 3.12:
+        This provides a backport of the new `type` statement in Python 3.12::
 
             type ListOrSet[T] = list[T] | set[T]
 
-        is equivalent to:
+        is equivalent to::
 
             T = TypeVar("T")
             ListOrSet = TypeAliasType("ListOrSet", list[T] | set[T], type_params=(T,))
@@ -2797,7 +2866,6 @@ else:
         - The TypeAliasType instance must be immediately assigned to a variable
           of the same name. (For example, 'X = TypeAliasType("Y", int)' is invalid,
           as is 'X, Y = TypeAliasType("X", int), TypeAliasType("Y", int)').
-
         """
 
         def __init__(self, name: str, value, *, type_params=()):
