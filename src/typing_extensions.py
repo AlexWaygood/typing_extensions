@@ -741,6 +741,7 @@ else:
                     and issubclass(other, (typing.Generic, _ProtocolMeta))
                     and getattr(other, "_is_protocol", False)
                 ):
+                    1/0
                     break
             else:
                 return NotImplemented
