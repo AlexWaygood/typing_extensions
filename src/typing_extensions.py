@@ -2725,6 +2725,8 @@ else:
     # so just leave the signature as it is on 3.7.
     if sys.version_info >= (3, 8):
         NamedTuple.__text_signature__ = '(typename, fields=None, /, **kwargs)'
+        if not isinstance(NamedTuple, _types.FunctionType):
+            NamedTuple.__call__.__text_signature__ = NamedTuple.__text_signature__
 
 
 if hasattr(collections.abc, "Buffer"):
