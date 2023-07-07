@@ -57,10 +57,10 @@ jobs:
         uses: pdm-project/setup-pdm@v3
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Add local version of typing_extensions as a dependency
-        run: pdm add ./typing-extensions-latest
       - name: Install pydantic test dependencies
         run: pdm install -G testing -G email
+      - name: Install local version of typing_extensions
+        run: pdm run pip install ./typing-extensions-latest
       - name: List installed dependencies
         run: pdm list -vv  # pdm equivalent to `pip list`
       - name: Run pydantic tests
@@ -326,12 +326,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install pdm for cattrs
         run: pip install pdm
-      - name: Add latest typing-extensions as a dependency
-        run: |
-          pdm remove typing-extensions
-          pdm add --dev ./typing-extensions-latest
       - name: Install cattrs test dependencies
         run: pdm install --dev -G :all
+      - name: Install local version of typing_extensions
+        run: pdm run pip install ./typing-extensions-latest
       - name: List all installed dependencies
         run: pdm list -vv
       - name: Run cattrs tests
