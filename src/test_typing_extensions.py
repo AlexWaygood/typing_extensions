@@ -736,7 +736,7 @@ class LiteralTests(BaseTestCase):
         Literal[int]
         Literal[Literal[1, 2], Literal[4, 5]]
         Literal[3j + 2, ..., ()]
-        Literal[b"foo", u"bar"]
+        Literal[b"foo", "bar"]
         Literal[{"foo": 3, "bar": 4}]
         Literal[T]
 
@@ -2928,7 +2928,7 @@ class ProtocolTests(BaseTestCase):
         @runtime_checkable
         class P(Protocol):
             x: int = None
-        class B(object): pass
+        class B: pass
         self.assertNotIsInstance(B(), P)
         class C:
             x = 1
@@ -4535,7 +4535,7 @@ class LiteralStringTests(BaseTestCase):
             mod_name = 'typing'
         else:
             mod_name = 'typing_extensions'
-        self.assertEqual(repr(LiteralString), '{}.LiteralString'.format(mod_name))
+        self.assertEqual(repr(LiteralString), f'{mod_name}.LiteralString')
 
     def test_cannot_subscript(self):
         with self.assertRaises(TypeError):
@@ -4589,7 +4589,7 @@ class SelfTests(BaseTestCase):
             mod_name = 'typing'
         else:
             mod_name = 'typing_extensions'
-        self.assertEqual(repr(Self), '{}.Self'.format(mod_name))
+        self.assertEqual(repr(Self), f'{mod_name}.Self')
 
     def test_cannot_subscript(self):
         with self.assertRaises(TypeError):
@@ -4848,7 +4848,7 @@ class FinalDecoratorTests(BaseTestCase):
             def prop(self): ...
 
             @final
-            @lru_cache()  # noqa: B019
+            @lru_cache  # noqa: B019
             def cached(self): ...
 
         # Use getattr_static because the descriptor returns the

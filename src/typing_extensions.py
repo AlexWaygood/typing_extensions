@@ -132,9 +132,6 @@ __all__ = [
 PEP_560 = True
 GenericMeta = type
 
-# The functions below are modified copies of typing internal helpers.
-# They are needed by _ProtocolMeta and they provide support for PEP 646.
-
 
 class _Sentinel:
     def __repr__(self):
@@ -142,6 +139,10 @@ class _Sentinel:
 
 
 _marker = _Sentinel()
+
+
+# The functions below are modified copies of typing internal helpers.
+# They are needed to backport PEP 646.
 
 
 def _check_generic(cls, parameters, elen=_marker):
@@ -486,7 +487,7 @@ _EXCLUDED_ATTRS = frozenset(_EXCLUDED_ATTRS)
 def _get_protocol_attrs(cls):
     attrs = set()
     for base in cls.__mro__[:-1]:  # without object
-        if base.__name__ in {'Protocol', 'Generic'}:
+        if base in {Protocol, typing.Protocol, typing.Generic}:
             continue
         annotations = getattr(base, '__annotations__', {})
         for attr in (*base.__dict__, *annotations):
@@ -1274,8 +1275,8 @@ else:
 
 def _set_default(type_param, default):
     if isinstance(default, (tuple, list)):
-        type_param.__default__ = tuple((typing._type_check(d, "Default must be a type")
-                                        for d in default))
+        type_param.__default__ = tuple(typing._type_check(d, "Default must be a type")
+                                        for d in default)
     elif default != _marker:
         type_param.__default__ = typing._type_check(default, "Default must be a type")
     else:
