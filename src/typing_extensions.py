@@ -766,6 +766,59 @@ def _ensure_subclassable(mro_entries):
     return inner
 
 
+if sys.version_info >= (3, 11):
+    _type_check = typing._type_check
+else:
+    def _type_convert(arg, module=None, *, allow_special_forms=False):
+        """For converting None to type(None), and strings to ForwardRef."""
+        if arg is None:
+            return type(None)
+        if isinstance(arg, str):
+            return ForwardRef(arg, module=module, is_class=allow_special_forms)
+        return arg
+
+    def _type_check(arg, msg, is_argument=True, module=None, *, allow_special_forms=False):
+        """Check that the argument is a type, and return it (internal helper).
+
+        Vendored from CPython 3.12+, with some small modifications.
+
+        As a special case, accept None and return type(None) instead. Also wrap strings
+        into ForwardRef instances. Consider several corner cases, for example plain
+        special forms like Union are not valid, while Union[int, str] is OK, etc.
+        The msg argument is a human-readable error message, e.g.::
+
+            "Union[arg, ...]: arg should be a type."
+
+        We append the repr() of the actual value (truncated to 100 chars).
+        """
+        invalid_generic_forms = (typing.Generic, typing.Protocol)
+        if not allow_special_forms:
+            invalid_generic_forms += (typing.ClassVar,)
+            if is_argument:
+                invalid_generic_forms += (typing.Final,)
+
+        arg = _type_convert(arg, module=module, allow_special_forms=allow_special_forms)
+        if (isinstance(arg, typing._GenericAlias) and
+                arg.__origin__ in invalid_generic_forms):
+            raise TypeError(f"{arg} is not valid as type argument")
+        if arg in (
+            typing.Any,
+            getattr(typing, "LiteralString", object()),
+            typing.NoReturn,
+            getattr(typing, "Never", object()),
+            getattr(typing, "Self", object()),
+            getattr(typing, "TypeAlias", object())
+        ):
+            return arg
+        if allow_special_forms and arg in (typing.ClassVar, typing.Final):
+            return arg
+        if isinstance(arg, typing._SpecialForm) or arg in (typing.Generic, typing.Protocol):
+            raise TypeError(f"Plain {arg} is not valid as type argument")
+        if type(arg) is tuple:
+            raise TypeError(f"{msg} Got {arg!r:.100}.")
+        return arg
+
+
 if sys.version_info >= (3, 13):
     # The standard library TypedDict in Python 3.8 does not store runtime information
     # about which (if any) keys are optional.  See https://bugs.python.org/issue38834
