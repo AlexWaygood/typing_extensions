@@ -63,7 +63,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           allow-python-prereleases: true
       - name: Add local version of typing_extensions as a dependency
-        run: pdm add ./typing-extensions-latest
+        run: pdm add ./typing-extensions-latest --no-lock
       - name: Install pydantic test dependencies
         run: pdm install -G testing -G email
       - name: List installed dependencies
@@ -335,10 +335,10 @@ jobs:
         run: pip install pdm
       - name: Add latest typing-extensions as a dependency
         run: |
-          pdm remove typing-extensions
-          pdm add --dev ./typing-extensions-latest
+          pdm remove typing-extensions --no-lock
+          pdm add --dev ./typing-extensions-latest --no-lock
       - name: Install cattrs test dependencies
-        run: pdm install --dev -G :all
+        run: pdm install --dev -G :all,test
       - name: List all installed dependencies
         run: pdm list -vv
       - name: Run cattrs tests
